@@ -14,6 +14,7 @@ import (
 const TOTAL_RECORDS int = 500000 // How many records you want to simulate.
 
 func main() {
+	fmt.Printf("Started. Generating %d records.\n", TOTAL_RECORDS)
 	database, _ :=
 		// sql.Open("sqlite3", "./bogo.db")  // Switch this if you want to save to a file
 		sql.Open("sqlite3", ":memory:")
@@ -27,21 +28,32 @@ func main() {
 
 	// valueStrings := make([]string, 0) //[]string{}
 	for i := 0; i < TOTAL_RECORDS; i++ {
-		statement.Exec(fmt.Sprintf("name-%d", i), fmt.Sprintf("kind: %s, counter: %d, number: %d, boolean: %t, beer: %s, car: %s, color: %s, city: %s , property1: value1, property2: value2, property3: value3, property4: value4  ",
-			gofakeit.Color(), i, gofakeit.Number(1, 999999), gofakeit.Bool(), gofakeit.BeerName(), gofakeit.CarModel(), gofakeit.Color(), gofakeit.City()))
-		// valueStrings = append(valueStrings, " (myName, myNamespace)")
+
+		// TODO: marshall JSON from map[string]interface{}
+		statement.Exec(fmt.Sprintf("name-%d", i),
+			fmt.Sprintf("{ \"kind\": \"%s\", \"counter\": %d, \"number\": %d, \"boolean\": %t, \"beer\": \"%s\", \"car\": \"%s\", \"color\": \"%s\", \"city\": \"%s\" ,\"label\" : [\"aaa\", \"bbb\"]}",
+				gofakeit.Color(), i, gofakeit.Number(1, 999999), gofakeit.Bool(), gofakeit.BeerName(), gofakeit.CarModel(), gofakeit.Color(), gofakeit.City()))
+
 	}
 	// sql := fmt.Sprintf("INSERT INTO resource (name, namespace) VALUES %s", strings.Join(valueStrings, ","))
 
 	database.Prepare("COMMIT TRANSACTION")
-	fmt.Printf("Insert %d records took %v \n", TOTAL_RECORDS, time.Since(start))
+	fmt.Printf("Insert %d records took %v \n\n", TOTAL_RECORDS, time.Since(start))
 
 	// Query
 	startQuery := time.Now()
-	rows, _ :=
-		database.Query("SELECT id, data FROM resource WHERE id=?", gofakeit.Number(1, TOTAL_RECORDS))
+	rows, queryError :=
+		// database.Query("SELECT id, data FROM resource WHERE id=?", gofakeit.Number(1, TOTAL_RECORDS))
+
+		// database.Query("SELECT id, data from resource where json_extract(data, \"$.counter\")<=5")
+		// database.Query("SELECT id, data from resource where json_extract(data, \"$.color\")='Green' LIMIT 10")
+		database.Query("SELECT id, data from resource where json_extract(data, \"$.city\") LIKE 'New%' LIMIT 10")
+
+	if queryError != nil {
+		fmt.Println("Query Error", queryError)
+	}
 	var id int
-	fmt.Println("Query by primary key took: ", time.Since(startQuery))
+	fmt.Println("Query JSON key took: ", time.Since(startQuery))
 	var data string
 	for rows.Next() {
 		rows.Scan(&id, &data)
