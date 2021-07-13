@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"strconv"
 	"sync"
 	"time"
 
@@ -19,49 +18,95 @@ func main() {
 		// sql.Open("sqlite3", "./bogo.db")  // Switch this if you want to save to a file
 		sql.Open("sqlite3", ":memory:")
 	statement, _ :=
-		database.Prepare("CREATE TABLE IF NOT EXISTS resource (id INTEGER PRIMARY KEY, name TEXT, data TEXT)")
+		database.Prepare("CREATE TABLE IF NOT EXISTS resource (id TEXT, name TEXT, data TEXT)")
 	statement.Exec()
 	database.Prepare("BEGIN TRANSACTION")
 	statement, _ =
-		database.Prepare("INSERT INTO resource (name, data) VALUES (?, ?)")
+		database.Prepare("INSERT INTO resource (id, name, data) VALUES (?, ?, ?)")
+	var uid string
 	start := time.Now()
 
-	// valueStrings := make([]string, 0) //[]string{}
 	for i := 0; i < TOTAL_RECORDS; i++ {
+		// Remember UID to use in query.
+		uid = gofakeit.UUID()
 
-		// TODO: marshall JSON from map[string]interface{}
-		statement.Exec(fmt.Sprintf("name-%d", i),
-			fmt.Sprintf("{ \"kind\": \"%s\", \"counter\": %d, \"number\": %d, \"boolean\": %t, \"beer\": \"%s\", \"car\": \"%s\", \"color\": \"%s\", \"city\": \"%s\" ,\"label\" : [\"aaa\", \"bbb\"]}",
-				gofakeit.Color(), i, gofakeit.Number(1, 999999), gofakeit.Bool(), gofakeit.BeerName(), gofakeit.CarModel(), gofakeit.Color(), gofakeit.City()))
+		// This is hard to read but faster than JSON marshal.
+		_, err := statement.Exec(uid, fmt.Sprintf("name-%d", i),
+			fmt.Sprintf(`{"kind":%q,"counter":%d,"number":%d,"boolean":%t,"beer":%q,"car":%q,"color":%q,"city":%q,"label":%s}`,
+				gofakeit.Color(),
+				i,
+				gofakeit.Number(1, 999999),
+				gofakeit.Bool(),
+				gofakeit.BeerName(),
+				gofakeit.CarModel(),
+				gofakeit.Color(),
+				gofakeit.City(),
+				`["label1=value1","label2=value2","label3=value3","label4=value4","label5=value5"]`,
+			))
 
+		// ALTERNATIVE: This is easier to read but JSON marshal makes it slower.
+		//
+		// record := map[string]interface{}{
+		// 	"kind":    gofakeit.Color(),
+		// 	"counter": i,
+		// 	"number":  gofakeit.Number(1, 9999),
+		// 	"bool":    gofakeit.Bool(),
+		// 	"beer":    gofakeit.BeerName(),
+		// 	"car":     gofakeit.CarModel(),
+		// 	"color":   gofakeit.Color(),
+		// 	"city":    gofakeit.City(),
+		// 	"company": gofakeit.Company(),
+		// 	"label": []string{"label1=value1", "label2=value2", "label3=value3", "label4=value4", "label5=value5", gofakeit.Fruit()},
+		// }
+		// jsonData, _ := json.Marshal(record)
+		// statement.Exec(i, fmt.Sprintf("name-%d", i), jsonData)
+
+		if err != nil {
+			fmt.Println("Error inserting:", err)
+		}
 	}
-	// sql := fmt.Sprintf("INSERT INTO resource (name, namespace) VALUES %s", strings.Join(valueStrings, ","))
 
 	database.Prepare("COMMIT TRANSACTION")
 	fmt.Printf("Insert %d records took %v \n\n", TOTAL_RECORDS, time.Since(start))
 
-	// Query
-	startQuery := time.Now()
-	rows, queryError :=
-		// database.Query("SELECT id, data FROM resource WHERE id=?", gofakeit.Number(1, TOTAL_RECORDS))
+	// Benchmark queries
+	fmt.Println("DESCRIPTION: Find a record using the UID")
+	benchmarkQuery(database, fmt.Sprintf("SELECT id, data FROM resource WHERE id='%s'", uid))
 
-		// database.Query("SELECT id, data from resource where json_extract(data, \"$.counter\")<=5")
-		// database.Query("SELECT id, data from resource where json_extract(data, \"$.color\")='Green' LIMIT 10")
-		database.Query("SELECT id, data from resource where json_extract(data, \"$.city\") LIKE 'New%' LIMIT 10")
+	fmt.Println("\nDESCRIPTION: Find records with counter less than 5")
+	benchmarkQuery(database, "SELECT id, data from resource where json_extract(data, \"$.counter\")<=5")
 
-	if queryError != nil {
-		fmt.Println("Query Error", queryError)
-	}
-	var id int
-	fmt.Println("Query JSON key took: ", time.Since(startQuery))
-	var data string
-	for rows.Next() {
-		rows.Scan(&id, &data)
-		fmt.Println(strconv.Itoa(id) + ": " + " " + data)
-	}
+	fmt.Println("\nDESCRIPTION: Find records with a city name containing `New`")
+	benchmarkQuery(database, "SELECT id, data from resource where json_extract(data, \"$.city\") LIKE 'New%' LIMIT 10")
 
-	fmt.Println("\nWon't exit so I can mesure memory.")
+	fmt.Println("\nWon't exit so I can mesure memory.  TODO: Print memory stats before exiting.")
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	wg.Wait()
+}
+
+const PRINT_RESULTS bool = true
+
+func benchmarkQuery(database *sql.DB, q string) {
+	startQuery := time.Now()
+	rows, queryError := database.Query(q)
+	if queryError != nil {
+		// FIXME: I see this error, but rows has the correct results.
+		fmt.Println("Error executing query: ", queryError)
+	}
+
+	fmt.Println("QUERY      : ", q)
+	fmt.Println("TIME       : ", time.Since(startQuery))
+	if PRINT_RESULTS {
+		fmt.Println("RESULTS    :")
+		var data, id string
+		for rows.Next() {
+			rows.Scan(&id, &data)
+			fmt.Printf("\tUID: %s %s\n", id, data)
+		}
+		rows.Close()
+	} else {
+		fmt.Println("RESULTS    :  To include serults set PRINT_RESULTS=true")
+	}
+
 }
