@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"os"
 	"runtime"
 	"sync"
 	"time"
@@ -16,11 +17,14 @@ const PRINT_RESULTS bool = false
 
 func main() {
 	fmt.Printf("Generating %d records.\n\n", TOTAL_RECORDS)
+
+	os.Remove("./benchmark.db") // Delete database file if it exists.
 	database, _ :=
-		// sql.Open("sqlite3", "./bogo.db")  // Switch this if you want to save to a file
-		sql.Open("sqlite3", ":memory:")
+		sql.Open("sqlite3", "./benchmark.db") // Switch this if you want to save to a file
+		// sql.Open("sqlite3", ":memory:")
 
 	database.Exec("CREATE TABLE IF NOT EXISTS resources (id TEXT, name TEXT, data TEXT)")
+	// IMPORTANT: With BEGIN and COMMIT TRANSACTION saving inserts to a file is comparable to in memory.
 	database.Exec("BEGIN TRANSACTION")
 	statement, _ := database.Prepare("INSERT INTO resources (id, name, data) VALUES (?, ?, ?)")
 
@@ -79,7 +83,7 @@ func main() {
 	benchmarkQuery(database, "SELECT id, data from resources where json_extract(data, \"$.counter\") <= 5 LIMIT 5")
 
 	fmt.Println("\nDESCRIPTION: Find records with a city name containing `New`")
-	benchmarkQuery(database, "SELECT id, data from resources where json_extract(data, \"$.city\") LIKE 'New%' LIMIT 10")
+	benchmarkQuery(database, "SELECT id, data from resources where json_extract(data, \"$.city\") LIKE 'new%' LIMIT 10")
 
 	fmt.Println("\nDESCRIPTION: Find all the values for the field 'color'")
 	benchmarkQuery(database, "SELECT DISTINCT json_extract(resources.data, '$.color') as color from resources ORDER BY color ASC")
