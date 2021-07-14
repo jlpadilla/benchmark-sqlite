@@ -18,11 +18,11 @@ func main() {
 		// sql.Open("sqlite3", "./bogo.db")  // Switch this if you want to save to a file
 		sql.Open("sqlite3", ":memory:")
 	statement, _ :=
-		database.Prepare("CREATE TABLE IF NOT EXISTS resource (id TEXT, name TEXT, data TEXT)")
+		database.Prepare("CREATE TABLE IF NOT EXISTS resources (id TEXT, name TEXT, data TEXT)")
 	statement.Exec()
 	database.Prepare("BEGIN TRANSACTION")
 	statement, _ =
-		database.Prepare("INSERT INTO resource (id, name, data) VALUES (?, ?, ?)")
+		database.Prepare("INSERT INTO resources (id, name, data) VALUES (?, ?, ?)")
 	var uid string
 	start := time.Now()
 
@@ -71,13 +71,16 @@ func main() {
 
 	// Benchmark queries
 	fmt.Println("DESCRIPTION: Find a record using the UID")
-	benchmarkQuery(database, fmt.Sprintf("SELECT id, data FROM resource WHERE id='%s'", uid))
+	benchmarkQuery(database, fmt.Sprintf("SELECT id, data FROM resources WHERE id='%s'", uid))
 
 	fmt.Println("\nDESCRIPTION: Find records with counter less than 5")
-	benchmarkQuery(database, "SELECT id, data from resource where json_extract(data, \"$.counter\")<=5")
+	benchmarkQuery(database, "SELECT id, data from resources where json_extract(data, \"$.counter\")<=5")
 
 	fmt.Println("\nDESCRIPTION: Find records with a city name containing `New`")
-	benchmarkQuery(database, "SELECT id, data from resource where json_extract(data, \"$.city\") LIKE 'New%' LIMIT 10")
+	benchmarkQuery(database, "SELECT id, data from resources where json_extract(data, \"$.city\") LIKE 'New%' LIMIT 10")
+
+	fmt.Println("\nDESCRIPTION: Find all the values for the field 'color'")
+	benchmarkQuery(database, "SELECT DISTINCT json_extract(resources.data, '$.color') as color from resources ORDER BY color ASC")
 
 	fmt.Println("\nWon't exit so I can mesure memory.  TODO: Print memory stats before exiting.")
 	wg := sync.WaitGroup{}
@@ -85,7 +88,7 @@ func main() {
 	wg.Wait()
 }
 
-const PRINT_RESULTS bool = true
+const PRINT_RESULTS bool = false
 
 func benchmarkQuery(database *sql.DB, q string) {
 	startQuery := time.Now()
@@ -101,8 +104,14 @@ func benchmarkQuery(database *sql.DB, q string) {
 		fmt.Println("RESULTS    :")
 		var data, id string
 		for rows.Next() {
-			rows.Scan(&id, &data)
-			fmt.Printf("\tUID: %s %s\n", id, data)
+			err := rows.Scan(&id, &data)
+			if err != nil {
+				rows.Scan(&data)
+			}
+			fmt.Println("\t", id, data)
+			// } else {
+			// 	fmt.Println(id)
+			// }
 		}
 		rows.Close()
 	} else {
