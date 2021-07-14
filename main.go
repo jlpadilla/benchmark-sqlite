@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"runtime"
 	"sync"
 	"time"
 
@@ -11,14 +12,16 @@ import (
 )
 
 const TOTAL_RECORDS int = 500000 // How many records you want to simulate.
+const PRINT_RESULTS bool = false
 
 func main() {
-	fmt.Printf("Started. Generating %d records.\n", TOTAL_RECORDS)
+	fmt.Printf("Generating %d records.\n\n", TOTAL_RECORDS)
 	database, _ :=
 		// sql.Open("sqlite3", "./bogo.db")  // Switch this if you want to save to a file
 		sql.Open("sqlite3", ":memory:")
 	statement, _ :=
 		database.Prepare("CREATE TABLE IF NOT EXISTS resources (id TEXT, name TEXT, data TEXT)")
+		// NOTE: From observation having name inside the JSON objectt uses more memory.
 	statement.Exec()
 	database.Prepare("BEGIN TRANSACTION")
 	statement, _ =
@@ -27,8 +30,7 @@ func main() {
 	start := time.Now()
 
 	for i := 0; i < TOTAL_RECORDS; i++ {
-		// Remember UID to use in query.
-		uid = gofakeit.UUID()
+		uid = gofakeit.UUID() // Remember this UID to use later in the query.
 
 		// This is hard to read but faster than JSON marshal.
 		_, err := statement.Exec(uid, fmt.Sprintf("name-%d", i),
@@ -62,7 +64,7 @@ func main() {
 		// statement.Exec(i, fmt.Sprintf("name-%d", i), jsonData)
 
 		if err != nil {
-			fmt.Println("Error inserting:", err)
+			fmt.Println("Error inserting record:", err)
 		}
 	}
 
@@ -70,7 +72,8 @@ func main() {
 	fmt.Printf("Insert %d records took %v \n\n", TOTAL_RECORDS, time.Since(start))
 
 	// Benchmark queries
-	fmt.Println("DESCRIPTION: Find a record using the UID")
+	fmt.Println("BENCHMARK QUERIES")
+	fmt.Println("\nDESCRIPTION: Find a record using the UID")
 	benchmarkQuery(database, fmt.Sprintf("SELECT id, data FROM resources WHERE id='%s'", uid))
 
 	fmt.Println("\nDESCRIPTION: Find records with counter less than 5")
@@ -82,21 +85,20 @@ func main() {
 	fmt.Println("\nDESCRIPTION: Find all the values for the field 'color'")
 	benchmarkQuery(database, "SELECT DISTINCT json_extract(resources.data, '$.color') as color from resources ORDER BY color ASC")
 
-	fmt.Println("\nWon't exit so I can mesure memory.  TODO: Print memory stats before exiting.")
+	PrintMemUsage()
+	fmt.Println("\nWon't exit so I can get memory usage from OS.")
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	wg.Wait()
 }
 
-const PRINT_RESULTS bool = false
-
 func benchmarkQuery(database *sql.DB, q string) {
 	startQuery := time.Now()
 	rows, queryError := database.Query(q)
 	if queryError != nil {
-		// FIXME: I see this error, but rows has the correct results.
 		fmt.Println("Error executing query: ", queryError)
 	}
+	defer rows.Close()
 
 	fmt.Println("QUERY      : ", q)
 	fmt.Println("TIME       : ", time.Since(startQuery))
@@ -109,13 +111,22 @@ func benchmarkQuery(database *sql.DB, q string) {
 				rows.Scan(&data)
 			}
 			fmt.Println("\t", id, data)
-			// } else {
-			// 	fmt.Println(id)
-			// }
 		}
-		rows.Close()
 	} else {
-		fmt.Println("RESULTS    :  To include serults set PRINT_RESULTS=true")
+		fmt.Println("RESULTS    :  To print results set PRINT_RESULTS=true")
 	}
+}
 
+func PrintMemUsage() {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	// For info on each, see: https://golang.org/pkg/runtime/#MemStats
+	fmt.Println("\nMEMORY USAGE:")
+	fmt.Printf("\tAlloc = %v MiB", bToMb(m.Alloc))
+	fmt.Printf("\n\tTotalAlloc = %v MiB", bToMb(m.TotalAlloc))
+	fmt.Printf("\n\tSys = %v MiB", bToMb(m.Sys))
+	fmt.Printf("\n\tNumGC = %v\n", m.NumGC)
+}
+func bToMb(b uint64) uint64 {
+	return b / 1024 / 1024
 }
