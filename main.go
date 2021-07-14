@@ -19,13 +19,11 @@ func main() {
 	database, _ :=
 		// sql.Open("sqlite3", "./bogo.db")  // Switch this if you want to save to a file
 		sql.Open("sqlite3", ":memory:")
-	statement, _ :=
-		database.Prepare("CREATE TABLE IF NOT EXISTS resources (id TEXT, name TEXT, data TEXT)")
-		// NOTE: From observation having name inside the JSON objectt uses more memory.
-	statement.Exec()
-	database.Prepare("BEGIN TRANSACTION")
-	statement, _ =
-		database.Prepare("INSERT INTO resources (id, name, data) VALUES (?, ?, ?)")
+
+	database.Exec("CREATE TABLE IF NOT EXISTS resources (id TEXT, name TEXT, data TEXT)")
+	database.Exec("BEGIN TRANSACTION")
+	statement, _ := database.Prepare("INSERT INTO resources (id, name, data) VALUES (?, ?, ?)")
+
 	var uid string
 	start := time.Now()
 
@@ -68,8 +66,9 @@ func main() {
 		}
 	}
 
-	database.Prepare("COMMIT TRANSACTION")
-	fmt.Printf("Insert %d records took %v \n\n", TOTAL_RECORDS, time.Since(start))
+	database.Exec("COMMIT TRANSACTION")
+	fmt.Printf("Insert %d records took %v \n", TOTAL_RECORDS, time.Since(start))
+	PrintMemUsage()
 
 	// Benchmark queries
 	fmt.Println("BENCHMARK QUERIES")
@@ -77,7 +76,7 @@ func main() {
 	benchmarkQuery(database, fmt.Sprintf("SELECT id, data FROM resources WHERE id='%s'", uid))
 
 	fmt.Println("\nDESCRIPTION: Find records with counter less than 5")
-	benchmarkQuery(database, "SELECT id, data from resources where json_extract(data, \"$.counter\")<=5")
+	benchmarkQuery(database, "SELECT id, data from resources where json_extract(data, \"$.counter\") <= 5 LIMIT 5")
 
 	fmt.Println("\nDESCRIPTION: Find records with a city name containing `New`")
 	benchmarkQuery(database, "SELECT id, data from resources where json_extract(data, \"$.city\") LIKE 'New%' LIMIT 10")
@@ -125,7 +124,7 @@ func PrintMemUsage() {
 	fmt.Printf("\tAlloc = %v MiB", bToMb(m.Alloc))
 	fmt.Printf("\n\tTotalAlloc = %v MiB", bToMb(m.TotalAlloc))
 	fmt.Printf("\n\tSys = %v MiB", bToMb(m.Sys))
-	fmt.Printf("\n\tNumGC = %v\n", m.NumGC)
+	fmt.Printf("\n\tNumGC = %v\n\n", m.NumGC)
 }
 func bToMb(b uint64) uint64 {
 	return b / 1024 / 1024
