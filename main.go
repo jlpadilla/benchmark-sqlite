@@ -88,6 +88,12 @@ func main() {
 	fmt.Println("\nDESCRIPTION: Find all the values for the field 'color'")
 	benchmarkQuery(database, "SELECT DISTINCT json_extract(resources.data, '$.color') as color from resources ORDER BY color ASC")
 
+	fmt.Println("\nDESCRIPTION: Find count of all values for the field 'kind'")
+	benchmarkQuery(database, "SELECT json_extract(resources.data, '$.kind') as kind , count(json_extract(resources.data, '$.kind')) as count FROM resources GROUP BY kind ORDER BY count DESC")
+
+	fmt.Println("\nDESCRIPTION: Find count of all values for the field 'kind' using subquery")
+	benchmarkQuery(database, "SELECT kind, count(*) as count FROM (SELECT json_extract(resources.data, '$.kind') as kind FROM resources) GROUP BY kind ORDER BY count DESC")
+
 	PrintMemUsage()
 	fmt.Println("\nWon't exit so I can get memory usage from OS.")
 	wg := sync.WaitGroup{}
