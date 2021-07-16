@@ -82,25 +82,30 @@ func main() {
 
 	fmt.Printf("Adding index to resource table with %d records took %v \n\n", TOTAL_RECORDS, time.Since(start))
 
-	database.Exec("CREATE TABLE IF NOT EXISTS relations (id TEXT, relatedID TEXT)")
+	database.Exec("CREATE TABLE IF NOT EXISTS relations (id TEXT, kind TEXT, relatedID TEXT, relatedTo TEXT)")
 	database.Exec("COMMIT TRANSACTION")
 
 	database.Exec("BEGIN TRANSACTION")
-	statement, _ = database.Prepare("INSERT INTO relations (id, relatedID) VALUES (?, ?)")
+	statement, _ = database.Prepare("INSERT INTO relations (id, kind, relatedID, relatedTo) VALUES (?, ?, ?, ?)")
 
 	start = time.Now()
-	relations := [11]int{-5, 2, 2, 2, 1, 1, 4, -6, -7, -8, 0}
+	kinds := [11]string{"app", "pod1", "pod2", "rs1", "rs2", "deploy", "sub", "secret", "cm", "volume", "none"}
+	relatedTos := [11]string{"none", "rs1", "rs2", "deploy", "deploy", "sub", "app", "pod1", "pod1", "pod1", "none"}
+
+	relations := [11]int{0, 2, 2, 2, 1, 1, 4, -6, -7, -8, 0}
 	for i := 21; i <= TOTAL_RECORDS; i++ {
 		j := (i % 10)
-		// fmt.Println("i: ", i, " j: ", j, "relations[j]: ", relations[j])
-		uid := lookUpUID(database, fmt.Sprintf("name-%d", i))
-		relatedID := lookUpUID(database, fmt.Sprintf("name-%d", (i+relations[j])))
-		// fmt.Println("i: ", i, " uid: ", uid, "relatedID: ", relatedID)
+		if j != 0 {
+			// fmt.Println("i: ", i, " j: ", j, "relations[j]: ", relations[j])
+			uid := lookUpUID(database, fmt.Sprintf("name-%d", i))
+			relatedID := lookUpUID(database, fmt.Sprintf("name-%d", (i+relations[j])))
+			// fmt.Println("i: ", i, " uid: ", uid, "relatedID: ", relatedID)
 
-		_, err := statement.Exec(uid, relatedID)
+			_, err := statement.Exec(uid, kinds[j], relatedID, relatedTos[j])
 
-		if err != nil {
-			fmt.Println("Error inserting record:", err)
+			if err != nil {
+				fmt.Println("Error inserting record:", err)
+			}
 		}
 	}
 	fmt.Printf("Inserting relations table with %d records took %v \n", TOTAL_RECORDS-20, time.Since(start))
