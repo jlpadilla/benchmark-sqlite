@@ -101,6 +101,30 @@ func main() {
 	wg.Wait()
 }
 
+// func benchmarkQuery(database *sql.DB, q string) {
+// 	startQuery := time.Now()
+// 	rows, queryError := database.Query(q)
+// 	if queryError != nil {
+// 		fmt.Println("Error executing query: ", queryError)
+// 	}
+// 	defer rows.Close()
+
+// 	fmt.Println("QUERY      : ", q)
+// 	fmt.Println("TIME       : ", time.Since(startQuery))
+// 	if PRINT_RESULTS {
+// 		fmt.Println("RESULTS    :")
+// 		var data, id string
+// 		for rows.Next() {
+// 			err := rows.Scan(&id, &data)
+// 			if err != nil {
+// 				rows.Scan(&data)
+// 			}
+// 			fmt.Println("\t", id, data)
+// 		}
+// 	} else {
+// 		fmt.Println("RESULTS    :  To print results set PRINT_RESULTS=true")
+// 	}
+// }
 func benchmarkQuery(database *sql.DB, q string) {
 	startQuery := time.Now()
 	rows, queryError := database.Query(q)
@@ -110,20 +134,21 @@ func benchmarkQuery(database *sql.DB, q string) {
 	defer rows.Close()
 
 	fmt.Println("QUERY      : ", q)
-	fmt.Println("TIME       : ", time.Since(startQuery))
-	if PRINT_RESULTS {
-		fmt.Println("RESULTS    :")
-		var data, id string
-		for rows.Next() {
-			err := rows.Scan(&id, &data)
-			if err != nil {
-				rows.Scan(&data)
-			}
+	fmt.Println("RESULTS    :")
+	var data, id string
+	for rows.Next() {
+		err := rows.Scan(&id, &data)
+		if err != nil {
+			rows.Scan(&data)
+		}
+		if PRINT_RESULTS {
 			fmt.Println("\t", id, data)
 		}
-	} else {
+	}
+	if !PRINT_RESULTS {
 		fmt.Println("RESULTS    :  To print results set PRINT_RESULTS=true")
 	}
+	fmt.Println("TIME       : ", time.Since(startQuery))
 }
 
 func PrintMemUsage() {
