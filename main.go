@@ -23,7 +23,7 @@ func main() {
 		sql.Open("sqlite3", "./benchmark.db") // Switch this if you want to save to a file
 		// sql.Open("sqlite3", ":memory:")
 
-	database.Exec("CREATE TABLE IF NOT EXISTS resources (id TEXT, name TEXT, data TEXT)")
+	database.Exec("CREATE TABLE IF NOT EXISTS resources (id TEXT PRIMARY KEY, name TEXT, data TEXT)")
 	// IMPORTANT: With BEGIN and COMMIT TRANSACTION saving inserts to a file is comparable to in memory.
 	database.Exec("BEGIN TRANSACTION")
 	statement, _ := database.Prepare("INSERT INTO resources (id, name, data) VALUES (?, ?, ?)")
@@ -77,22 +77,23 @@ func main() {
 	// Benchmark queries
 	fmt.Println("BENCHMARK QUERIES")
 	fmt.Println("\nDESCRIPTION: Find a record using the UID")
-	benchmarkQuery(database, fmt.Sprintf("SELECT id, data FROM resources WHERE id='%s'", uid))
+	benchmarkQuery(database, fmt.Sprintf("SELECT id, data FROM resources WHERE id='%s'", uid), true)
 
 	fmt.Println("\nDESCRIPTION: Find records with counter less than 5")
-	benchmarkQuery(database, "SELECT id, data from resources where json_extract(data, \"$.counter\") <= 5 LIMIT 5")
+	benchmarkQuery(database, "SELECT id, data from resources where json_extract(data, \"$.counter\") <= 5 LIMIT 5", PRINT_RESULTS)
 
 	fmt.Println("\nDESCRIPTION: Find records with a city name containing `New`")
-	benchmarkQuery(database, "SELECT id, data from resources where json_extract(data, \"$.city\") LIKE 'new%' LIMIT 10")
+	benchmarkQuery(database, "SELECT id, data from resources where json_extract(data, \"$.city\") LIKE 'new%' LIMIT 10", PRINT_RESULTS)
 
 	fmt.Println("\nDESCRIPTION: Find all the values for the field 'color'")
-	benchmarkQuery(database, "SELECT DISTINCT json_extract(resources.data, '$.color') as color from resources ORDER BY color ASC")
+	benchmarkQuery(database, "SELECT DISTINCT json_extract(resources.data, '$.color') from resources", PRINT_RESULTS)
+	// benchmarkQuery(database, "SELECT DISTINCT json_extract(resources.data, '$.color') as color from resources ORDER BY color ASC")
 
 	fmt.Println("\nDESCRIPTION: Find count of all values for the field 'kind'")
-	benchmarkQuery(database, "SELECT json_extract(resources.data, '$.kind') as kind , count(json_extract(resources.data, '$.kind')) as count FROM resources GROUP BY kind ORDER BY count DESC")
+	benchmarkQuery(database, "SELECT json_extract(resources.data, '$.kind') as kind , count(json_extract(resources.data, '$.kind')) as count FROM resources GROUP BY kind ORDER BY count DESC", PRINT_RESULTS)
 
 	fmt.Println("\nDESCRIPTION: Find count of all values for the field 'kind' using subquery")
-	benchmarkQuery(database, "SELECT kind, count(*) as count FROM (SELECT json_extract(resources.data, '$.kind') as kind FROM resources) GROUP BY kind ORDER BY count DESC")
+	benchmarkQuery(database, "SELECT kind, count(*) as count FROM (SELECT json_extract(resources.data, '$.kind') as kind FROM resources) GROUP BY kind ORDER BY count DESC", PRINT_RESULTS)
 
 	PrintMemUsage()
 	fmt.Println("\nWon't exit so I can get memory usage from OS.")
@@ -101,54 +102,36 @@ func main() {
 	wg.Wait()
 }
 
-// func benchmarkQuery(database *sql.DB, q string) {
-// 	startQuery := time.Now()
-// 	rows, queryError := database.Query(q)
-// 	if queryError != nil {
-// 		fmt.Println("Error executing query: ", queryError)
-// 	}
-// 	defer rows.Close()
-
-// 	fmt.Println("QUERY      : ", q)
-// 	fmt.Println("TIME       : ", time.Since(startQuery))
-// 	if PRINT_RESULTS {
-// 		fmt.Println("RESULTS    :")
-// 		var data, id string
-// 		for rows.Next() {
-// 			err := rows.Scan(&id, &data)
-// 			if err != nil {
-// 				rows.Scan(&data)
-// 			}
-// 			fmt.Println("\t", id, data)
-// 		}
-// 	} else {
-// 		fmt.Println("RESULTS    :  To print results set PRINT_RESULTS=true")
-// 	}
-// }
-func benchmarkQuery(database *sql.DB, q string) {
+func benchmarkQuery(database *sql.DB, q string, printResult bool) {
 	startQuery := time.Now()
 	rows, queryError := database.Query(q)
+	defer rows.Close()
 	if queryError != nil {
 		fmt.Println("Error executing query: ", queryError)
 	}
-	defer rows.Close()
 
 	fmt.Println("QUERY      : ", q)
 	fmt.Println("RESULTS    :")
-	var data, id string
+	var id, data, relatedTo string
+
 	for rows.Next() {
-		err := rows.Scan(&id, &data)
+		// columns, _ := rows.Columns()
+		err := rows.Scan(&id, &data, &relatedTo)
+		if err != nil {
+			err = rows.Scan(&id, &data)
+		}
 		if err != nil {
 			rows.Scan(&data)
 		}
-		if PRINT_RESULTS {
-			fmt.Println("\t", id, data)
+		if printResult {
+			fmt.Println("\t", id, data, relatedTo)
+		} else {
+			fmt.Println("RESULTS    :  To print results set PRINT_RESULTS=true")
+			break
 		}
 	}
-	if !PRINT_RESULTS {
-		fmt.Println("RESULTS    :  To print results set PRINT_RESULTS=true")
-	}
-	fmt.Println("TIME       : ", time.Since(startQuery))
+	// LESSON: We can stream results from rows, but using aggregation and sorting will delay results because we have to process al records first.
+	fmt.Println("TIME       : ", time.Since(startQuery), "\n")
 }
 
 func PrintMemUsage() {
